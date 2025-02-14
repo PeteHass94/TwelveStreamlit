@@ -31,6 +31,7 @@ sidebar_container = add_common_page_elements()
 page_container = st.sidebar.container()
 sidebar_container = st.sidebar.container()
 
+st.title("Champion League 2018 Run Analysis")
 st.divider()
 
 # Function to summarize radar and pitch plot insights

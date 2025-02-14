@@ -8,6 +8,7 @@ import json
 import datetime
 from scipy.stats import zscore
 import os
+import pickle
 
 from itertools import accumulate
 from pathlib import Path
@@ -576,6 +577,35 @@ class PersonStat(Stats):
         ser_metrics = self.df.squeeze()
 
         return self.data_point_class(id=id, name=name, ser_metrics=ser_metrics)
+
+class EuroPasses(Data):
+    """
+    Class to handle and process passing data from EuroPassesSlim.pkl
+    """
+    def __init__(self):
+        super().__init__()
+    
+    def get_raw_data(self):
+        """Loads the raw passing data from EuroPassesSlim.pkl"""
+        with open("data/euros/EuroPassesSlim.pkl", "rb") as file:
+            df = pickle.load(file)
+        return df
+
+    def process_data(self, df_raw):
+        """Processes the passing data to extract relevant information."""
+        df_raw = df_raw.rename(columns={"passer": "player_name", "receiver": "pass_recipient"})
+        return df_raw
+
+    def get_player_pass_data(self, player_name):
+        """Filters passes made by the selected player."""
+        return self.df[self.df["player_name"] == player_name]
+
+    def get_player_assists(self, player_name):
+        """Retrieves shot and goal assists for a given player."""
+        return self.df[(self.df["player_name"] == player_name) & 
+                       ((self.df["pass_shot_assist"] == True) | (self.df["pass_goal_assist"] == True))]
+
+    
     
     
 class RunStats(Stats):
