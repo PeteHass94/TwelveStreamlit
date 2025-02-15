@@ -27,14 +27,35 @@ euro_passes = EuroPasses()
 with st.expander("Raw Euro Passes Dataframe"):
     st.write(euro_passes.df)
 
-# Team selection
-teams = euro_passes.df['team'].unique()
-selected_team = st.sidebar.selectbox("Select a country", teams)
 
-# Filter players based on selected team
-team_players = euro_passes.df[euro_passes.df['team'] == selected_team]
-players = team_players['player_name'].unique() #.apply(lambda row: row['player_nickname'] if pd.notna(row['player_nickname']) else row['player'], axis=1).unique()
-selected_player = st.sidebar.selectbox("Select a player", players)
+st.sidebar.caption("Only showing selection of players with 1 or more goal assists.")
+
+# Filter players who have at least 1 goal assist
+players_with_assists = euro_passes.df[euro_passes.df['pass_goal_assist'] > 0]
+
+# Aggregate goal assists per player and ensure integers
+player_goal_assists = players_with_assists.groupby(['player_name', 'team'])['pass_goal_assist'].sum().reset_index()
+player_goal_assists['pass_goal_assist'] = player_goal_assists['pass_goal_assist'].astype(int)  # Convert to int
+
+# Sort players by goal assists in descending order (most assists first)
+player_goal_assists = player_goal_assists.sort_values(by='pass_goal_assist', ascending=False)
+
+# Format player names with team and correct singular/plural wording for "goal assisted"
+player_options = player_goal_assists.apply(
+    lambda row: f"{row['player_name']} ({row['team']}) - {row['pass_goal_assist']} Goal Assisted"
+    if row['pass_goal_assist'] == 1 
+    else f"{row['player_name']} ({row['team']}) - {row['pass_goal_assist']} Goals Assisted",
+    axis=1
+)
+
+# Create a dictionary to map the formatted name back to the actual player name
+player_mapping = dict(zip(player_options, player_goal_assists['player_name']))
+
+# Player selection dropdown with formatted options (most assists at the top)
+selected_player_display = st.sidebar.selectbox("Select a player", player_options)
+
+# Get the actual player name from the mapping
+selected_player = player_mapping[selected_player_display]
 
 # st.text(type(euro_passes.df)) 
 
@@ -44,7 +65,7 @@ player_pass_chance_data = player_pass_data[(player_pass_data['pass_shot_assist']
 
 st.header(f"{selected_player}'s Data")
 
-jerseyNumber, totalPasses, totalPassesComplete, totalShotAssists, totalGoalAssists, totalxA = euro_passes.get_player_metrics(player_pass_data)
+gamesPlayed, jerseyNumber, totalPasses, totalPassesComplete, totalShotAssists, totalGoalAssists, totalxA = euro_passes.get_player_metrics(player_pass_data)
 
 
 with st.expander(f"{selected_player}'s Euro Passes Dataframe ({totalPasses})"):
@@ -58,7 +79,7 @@ if (totalShotAssists + totalGoalAssists) > 0:
         st.write(player_pass_chance_data)
 
 
-st.text(f"Total Passes: {totalPasses}, Completed Passes: {totalPassesComplete}, Shot Assists: {totalShotAssists}, Goal Assists: {totalGoalAssists}, xA: {totalxA:.2f}")
+st.text(f"Matches featured in: {gamesPlayed}, Total Passes: {totalPasses}, Completed Passes: {totalPassesComplete}, Shot Assists: {totalShotAssists}, Goal Assists: {totalGoalAssists}, xA: {totalxA:.2f}")
 
 recipient_stats = euro_passes.get_recipient_metrics(player_pass_data)
 
@@ -67,7 +88,11 @@ if len(recipient_stats) > 0:
         st.write(recipient_stats)
 
 st.divider()
-st.header(f"{selected_player}'s Pitch Plot, #{jerseyNumber} Chances Created at Euro 2024")
+st.header(f"{selected_player}'s Pitch Plot")
+st.subheader(f"Chances Created in in {gamesPlayed} matches at Euro 2024")
+
+
+
 
 import matplotlib.pyplot as plt
 from mplsoccer import VerticalPitch

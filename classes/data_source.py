@@ -604,12 +604,13 @@ class EuroPasses(Data):
         """Gather key passing metrics made by the selected player."""
         # passes = self.df[self.df["player"] == player_name]
         jerseyNumber = player_passes['player_jersey_number'].iloc[0]
+        gamesPlayed = len(player_passes['match_id'].unique())
         totalPasses = len(player_passes)
         totalPassesComplete = len(player_passes[pd.isna(player_passes['pass_outcome'])])
         totalShotAssists =  len(player_passes[player_passes['pass_shot_assist'] == True])
         totalGoalAssists =  len(player_passes[player_passes['pass_goal_assist'] == True])
         totalxA = player_passes['xA'].sum() 
-        return jerseyNumber, totalPasses, totalPassesComplete, totalShotAssists, totalGoalAssists, totalxA
+        return gamesPlayed, jerseyNumber, totalPasses, totalPassesComplete, totalShotAssists, totalGoalAssists, totalxA
     
     def get_recipient_metrics(self, player_passes):
         """Gather key passing metrics on the players receiving the pass."""
