@@ -709,3 +709,85 @@ class DistributionPlotRuns(Visual):
                 "xanchor": "center",
             }
         )
+
+import matplotlib.pyplot as plt
+import matplotlib.patheffects as path_effects
+from mplsoccer import VerticalPitch
+import numpy as np
+
+import matplotlib.font_manager as font_manager
+
+
+class PitchPlot:
+    def __init__(self, player_name, player_jersey):
+        font_path = 'data/fonts/futura/futura.ttf'
+        font_path_light = 'data/fonts/futura/Futura Light font.ttf'        
+        
+        self.player_name = player_name
+        self.player_jersey = player_jersey
+        # self.background_color = "#0C0D0E"
+        self.font_props = font_manager.FontProperties(fname=font_path)
+        self.font_props_light = font_manager.FontProperties(fname=font_path_light)
+        self.path_eff = [path_effects.Stroke(linewidth=2, foreground='black'), path_effects.Normal()]
+        
+        self.fig = plt.figure(figsize=(8, 12), dpi=300)
+        self.fig.patch.set_facecolor(self.background_color)
+
+    def setup_axes(self):
+        ax1 = self.fig.add_axes([0.1, 0.82, 0.9, 0.22])
+        ax1.set_facecolor(self.background_color)
+        ax1.axis('off')
+        
+        ax2 = self.fig.add_axes([0.05, 0.4, 0.95, 0.6])
+        ax2.set_facecolor(self.background_color)
+        ax2.axis('off')
+        
+        return ax1, ax2
+
+    def add_title(self, ax):
+        ax.text(0.5, 0.85, f'{self.player_name} #{self.player_jersey}', fontsize=20, fontproperties=self.font_props,
+                fontweight='bold', color='white', ha='center')
+        ax.text(0.5, 0.72, 'Chances Created, at Euro 2024', fontsize=14, fontweight='bold', 
+                fontproperties=self.font_props, color='white', ha='center')
+    
+    def add_pass_key(self, ax):
+        key_items = [
+            {'x_text': 0.15, 'y_text': 0.55, 'text': 'Pass Key:', 'fontprops': self.font_props},
+            {'x_text': 0.3, 'y_text': 0.55, 'text': 'Shot Assists', 'fontprops': self.font_props_light,
+             'x_scatter': 0.4, 'y_scatter': 0.57, 'color': 'seagreen'},
+            {'x_text': 0.55, 'y_text': 0.55, 'text': 'Goal Assists', 'fontprops': self.font_props_light,
+             'x_scatter': 0.65, 'y_scatter': 0.57, 'color': 'goldenrod'}
+        ]
+        for item in key_items:
+            ax.text(item['x_text'], item['y_text'], item['text'], fontsize=12, fontproperties=item['fontprops'],
+                    color='white', ha='left')
+            if 'x_scatter' in item:
+                ax.scatter(item['x_scatter'], item['y_scatter'], s=150, color=item['color'], edgecolor=item['color'])
+                ax.arrow(item['x_scatter'], item['y_scatter'], dx=0.075, dy=0, width=0.02, head_length=0.02, 
+                         color=item['color'], linewidth=1)
+                ax.text(item['x_scatter'], item['y_scatter']-0.009, s=self.player_jersey, fontsize=10,
+                        fontproperties=item['fontprops'], path_effects=self.path_eff, color='white', ha='center')
+    
+    def draw_pitch(self, ax):
+        pitch = VerticalPitch(pitch_type='statsbomb', line_zorder=2, half=True, pitch_color='#0C0D0E',
+                              line_color='white', linewidth=0.75, axis=True, label=True)
+        pitch.draw(ax=ax)
+        return pitch
+
+    def plot_passes(self, ax, pitch, passes):
+        for x in passes.to_dict(orient='records'):
+            color = 'goldenrod' if x['pass_goal_assist'] else 'seagreen'
+            pitch.scatter(x['location'][0], x['location'][1], s=125, color=color, ax=ax, linewidth=0.8, edgecolor=color)
+            pitch.arrows(x['location'][0], x['location'][1], x['pass_end_location'][0], x['pass_end_location'][1],
+                         color=color, ax=ax, width=2, headwidth=5, headlength=5, pivot='tail')
+            pitch.annotate(self.player_jersey, xy=(x['location'][0]-0.1, x['location'][1]), ax=ax, fontsize=8,
+                           fontproperties=self.font_props_light, path_effects=self.path_eff, color='white', ha='center')
+    
+    def plot(self, player_passes):
+        ax1, ax2 = self.setup_axes()
+        self.add_title(ax1)
+        self.add_pass_key(ax1)
+        pitch = self.draw_pitch(ax2)
+        self.plot_passes(ax2, pitch, player_passes)
+        plt.show()
+    

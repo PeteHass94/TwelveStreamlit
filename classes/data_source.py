@@ -593,16 +593,47 @@ class EuroPasses(Data):
 
     def process_data(self, df_raw):
         """Processes the passing data to extract relevant information."""
-        df_raw = df_raw.rename(columns={"passer": "player_name", "receiver": "pass_recipient"})
+        df_raw = df_raw.rename(columns={"passer": "player_name", "receiver": "recipient_name"})
         return df_raw
 
     def get_player_pass_data(self, player_name):
-        """Filters passes made by the selected player."""
-        return self.df[self.df["player_name"] == player_name]
+        """Filters passes made by the selected player."""        
+        return self.df[self.df["player_name"] == player_name] 
+    
+    def get_player_metrics(self, player_passes):
+        """Gather key passing metrics made by the selected player."""
+        # passes = self.df[self.df["player"] == player_name]
+        jerseyNumber = player_passes['player_jersey_number'].iloc[0]
+        totalPasses = len(player_passes)
+        totalPassesComplete = len(player_passes[pd.isna(player_passes['pass_outcome'])])
+        totalShotAssists =  len(player_passes[player_passes['pass_shot_assist'] == True])
+        totalGoalAssists =  len(player_passes[player_passes['pass_goal_assist'] == True])
+        totalxA = player_passes['xA'].sum() 
+        return jerseyNumber, totalPasses, totalPassesComplete, totalShotAssists, totalGoalAssists, totalxA
+    
+    def get_recipient_metrics(self, player_passes):
+        """Gather key passing metrics on the players receiving the pass."""
+        PassesChanceCreated = player_passes[(player_passes['pass_shot_assist'] == True) | (player_passes['pass_goal_assist'] == True)]
+        
+        PassesChanceCreated['pass_shot_assist'] = PassesChanceCreated['pass_shot_assist'].fillna(0).astype(int)
+        PassesChanceCreated['pass_goal_assist'] = PassesChanceCreated['pass_goal_assist'].fillna(0).astype(int)
+        
+        # Group by recipient name and jersey number
+        recipient_metrics = PassesChanceCreated.groupby(
+            ['recipient_name', 'pass_recipient_jersey_number']
+        ).agg(
+            shots_created=('pass_shot_assist', 'sum'),  # Count of shots created
+            goals_created=('pass_goal_assist', 'sum'),  # Count of goals created
+            total_xA=('xA', 'sum')  # Sum of expected assists (xA)
+        ).reset_index()
+        # Sort the data by xA in descending order
+        recipient_metrics = recipient_metrics.sort_values(by='total_xA', ascending=False)
+    
+        return recipient_metrics
 
     def get_player_assists(self, player_name):
         """Retrieves shot and goal assists for a given player."""
-        return self.df[(self.df["player_name"] == player_name) & 
+        return self.df[(self.df["player"] == player_name) & 
                        ((self.df["pass_shot_assist"] == True) | (self.df["pass_goal_assist"] == True))]
 
     
