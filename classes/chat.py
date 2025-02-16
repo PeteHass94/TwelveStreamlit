@@ -480,3 +480,73 @@ class RunChat(Chat):
             "This chat can provide insights about a player's runs, including metrics like forward runs, speeds, distances, and angles."
         )
         return ret_val
+    
+class PassChat(Chat):
+    def __init__(self, chat_state_hash, player_name, player_passes, state="empty"):
+        """
+        Initialize a chat for discussing player passing.
+
+        Args:
+            chat_state_hash (int): Unique hash to identify the chat session.
+            player_name (str): Name of the selected player.
+            player_passes (DataFrame): DataFrame containing the player's passing metrics.
+            state (str, optional): Initial state of the chat. Defaults to "empty".
+        """
+        self.player_name = player_name
+        self.player_passes = player_passes
+        super().__init__(chat_state_hash, state=state)
+
+    def get_input(self):
+        """
+        Get input from the Streamlit user interface.
+        """
+        if x := st.chat_input(
+            placeholder=f"What else would you like to know about {self.player_name}'s passing performance?"
+        ):
+            if len(x) > 500:
+                st.error(
+                    f"Your message is too long ({len(x)} characters). Please keep it under 500 characters."
+                )
+            self.handle_input(x)
+
+    def instruction_messages(self):
+        """
+        Provide instructions for the agent.
+        """
+        first_messages = [
+            {"role": "system", "content": "You are a football scout specializing in player passing."},
+            {
+                "role": "user",
+                "content": (
+                    "After these messages, you will be interacting with a user of a football scouting platform. "
+                    f"The user has selected the player {self.player_name}, and the conversation will be about their passing performance. "
+                    "You will receive relevant information about the player's passing metrics to answer user queries. "
+                    "All user messages will be prefixed with 'User:' and enclosed with ```. "
+                    "When responding to the user, speak directly to them. "
+                    "Use the provided passing metrics to provide concise, 2-sentence answers, "
+                    "and do not include additional information not derived from the data."
+                ),
+            },
+        ]
+        return first_messages
+
+    def get_relevant_info(self, query):
+        """
+        Generate relevant information to answer the user's query.
+
+        Args:
+            query (str): User's query.
+
+        Returns:
+            str: Relevant information synthesized from the player's passing data.
+        """
+        # Provide basic metrics about the player's passing
+        ret_val = f"Here is a summary of {self.player_name}'s passing metrics: \n\n"
+        ret_val += self.player_passes.to_string(index=False)
+
+        # Add guidance for irrelevant queries
+        ret_val += (
+            "\n\nIf none of this information is relevant to the user's query, remind them: "
+            "This chat can provide insights about a player's passing, including metrics like pass completion, chances created, assists, xA, and passing angles."
+        )
+        return ret_val

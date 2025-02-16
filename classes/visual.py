@@ -43,6 +43,7 @@ def tick_text_color(color, text, alpha=1.0):
 
 class Visual:
     # Can't use streamlit options due to report generation
+    bg_gray = hex_to_rgb('#f3f3f3')
     dark_green = hex_to_rgb(
         "#002c1c"
     )  # hex_to_rgb(st.get_option("theme.secondaryBackgroundColor"))
@@ -711,83 +712,318 @@ class DistributionPlotRuns(Visual):
         )
 
 import matplotlib.pyplot as plt
-import matplotlib.patheffects as path_effects
 from mplsoccer import VerticalPitch
-import numpy as np
-
 import matplotlib.font_manager as font_manager
-
+import matplotlib.patheffects as path_effects
 
 class PitchPlot:
-    def __init__(self, player_name, player_jersey):
-        font_path = 'data/fonts/futura/futura.ttf'
-        font_path_light = 'data/fonts/futura/Futura Light font.ttf'        
-        
-        self.player_name = player_name
-        self.player_jersey = player_jersey
-        # self.background_color = "#0C0D0E"
+    def __init__(self, font_path='data/fonts/futura/futura.ttf', font_path_light='data/fonts/futura/Futura Light font.ttf'):
         self.font_props = font_manager.FontProperties(fname=font_path)
         self.font_props_light = font_manager.FontProperties(fname=font_path_light)
-        self.path_eff = [path_effects.Stroke(linewidth=2, foreground='black'), path_effects.Normal()]
-        
-        self.fig = plt.figure(figsize=(8, 12), dpi=300)
-        self.fig.patch.set_facecolor(self.background_color)
+        self.path_eff = [path_effects.Stroke(linewidth=0.5, foreground='black'), path_effects.Normal()]
 
-    def setup_axes(self):
-        ax1 = self.fig.add_axes([0.1, 0.82, 0.9, 0.22])
-        ax1.set_facecolor(self.background_color)
-        ax1.axis('off')
+    def create_pitch_plot(self, selected_player, jersey_number, player_pass_data, player_pass_chance_data, totalPassesComplete, totalPasses, totalShotAssists, totalGoalAssists, totalxA):
+        fig = plt.figure(figsize=(8, 12), dpi=300)
+        fig.patch.set_facecolor('#f3f3f3')
         
-        ax2 = self.fig.add_axes([0.05, 0.4, 0.95, 0.6])
-        ax2.set_facecolor(self.background_color)
+        ax1 = fig.add_axes([0.1, 0.82, 0.9, 0.22])
+        ax1.set_xlim(0, 1)
+        ax1.set_ylim(0, 1)
+        ax1.axis('off')
+
+        ax1.text(0.5, 0.85, f'{selected_player} #{jersey_number}', fontsize=20, fontproperties=self.font_props, fontweight='bold', color='black', ha='center')
+        ax1.text(0.5, 0.72, 'Chances Created, at Euro 2024', fontsize=14, fontproperties=self.font_props, color='black', ha='center')
+        
+        yPos1 = 0.55
+        yPos2 = yPos1 + 0.02
+        
+        key_items = [
+            {'x_text': 0.15, 'y_text': yPos1, 'text': 'Pass Key:', 'fontprops': self.font_props},
+            {'x_text': 0.3, 'y_text': yPos1, 'text': 'Shot Assists', 'fontprops': self.font_props_light, 'x_scatter': 0.4, 'y_scatter': yPos2, 'color': 'seagreen'},
+            {'x_text': 0.55, 'y_text': yPos1, 'text': 'Goal Assists', 'fontprops': self.font_props_light, 'x_scatter': 0.65, 'y_scatter': yPos2, 'color': 'goldenrod'}
+        ]
+        
+        for item in key_items:
+            self.add_key_item(ax1, item)
+        
+        ax2 = fig.add_axes([0.05, 0.4, 0.95, 0.6])
+        pitch = VerticalPitch(pitch_type='statsbomb', line_zorder=2, half=True, pitch_color='#0C0D0E', line_color='black', linewidth=.75, axis=True, label=True)
+        pitch.draw(ax=ax2)
         ax2.axis('off')
         
-        return ax1, ax2
-
-    def add_title(self, ax):
-        ax.text(0.5, 0.85, f'{self.player_name} #{self.player_jersey}', fontsize=20, fontproperties=self.font_props,
-                fontweight='bold', color='white', ha='center')
-        ax.text(0.5, 0.72, 'Chances Created, at Euro 2024', fontsize=14, fontweight='bold', 
-                fontproperties=self.font_props, color='white', ha='center')
-    
-    def add_pass_key(self, ax):
-        key_items = [
-            {'x_text': 0.15, 'y_text': 0.55, 'text': 'Pass Key:', 'fontprops': self.font_props},
-            {'x_text': 0.3, 'y_text': 0.55, 'text': 'Shot Assists', 'fontprops': self.font_props_light,
-             'x_scatter': 0.4, 'y_scatter': 0.57, 'color': 'seagreen'},
-            {'x_text': 0.55, 'y_text': 0.55, 'text': 'Goal Assists', 'fontprops': self.font_props_light,
-             'x_scatter': 0.65, 'y_scatter': 0.57, 'color': 'goldenrod'}
+        bin_statistic = pitch.bin_statistic(
+            player_pass_data['location'].str[0],
+            player_pass_data['location'].str[1],
+            statistic='count', bins=(12, 8), normalize=False)
+        pcm = pitch.heatmap(bin_statistic, cmap='Reds', edgecolor='dimgrey', ax=ax2, alpha=0.7)
+        
+        self.plot_events(ax2, pitch, player_pass_chance_data, jersey_number)
+        
+        ax_cbar = fig.add_axes([0.1, 0.405, 0.39, 0.02])
+        cbar = plt.colorbar(pcm, cax=ax_cbar, orientation='horizontal')
+        cbar.outline.set_edgecolor('black')
+        cbar.ax.xaxis.set_tick_params(color='black')
+        
+        plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color='black')
+        
+        max_value = np.max(bin_statistic['statistic'])
+        ax_cbar.text(x=max_value/2, y=1.4, s='Completed Passes', fontsize=12,
+            fontproperties=self.font_props, color='black', ha='center')
+        
+        yPos1 = 52.7
+        yPos2 = yPos1 - 3.7
+        
+        stats = [
+            {'x': 38, 'y1': yPos1, 'y2': yPos2, 'title': 'Passes', 'value': f"{totalPassesComplete}/{totalPasses}", 'color': 'red'},    
+            {'x': 50, 'y1': yPos1, 'y2': yPos2, 'title': 'Shot Asts.', 'value': f"{totalShotAssists}", 'color': 'seagreen'},
+            {'x': 61, 'y1': yPos1, 'y2': yPos2, 'title': 'Goal Asts.', 'value': f"{totalGoalAssists}", 'color': 'goldenrod'},
+            {'x': 73.5, 'y1': yPos1, 'y2': yPos2, 'title': 'xA', 'value': f"{totalxA:.2f}", 'color': 'black'},
         ]
-        for item in key_items:
-            ax.text(item['x_text'], item['y_text'], item['text'], fontsize=12, fontproperties=item['fontprops'],
-                    color='white', ha='left')
-            if 'x_scatter' in item:
-                ax.scatter(item['x_scatter'], item['y_scatter'], s=150, color=item['color'], edgecolor=item['color'])
-                ax.arrow(item['x_scatter'], item['y_scatter'], dx=0.075, dy=0, width=0.02, head_length=0.02, 
-                         color=item['color'], linewidth=1)
-                ax.text(item['x_scatter'], item['y_scatter']-0.009, s=self.player_jersey, fontsize=10,
-                        fontproperties=item['fontprops'], path_effects=self.path_eff, color='white', ha='center')
+        
+        for stat in stats:
+            ax2.text(stat['x'], stat['y1'], stat['title'], fontsize=12, fontproperties=self.font_props, color='black', ha='left')
+            ax2.text(stat['x'], stat['y2'], stat['value'], fontsize=12, fontproperties=self.font_props, color=stat['color'], ha='left')
+        
+        return fig
     
-    def draw_pitch(self, ax):
-        pitch = VerticalPitch(pitch_type='statsbomb', line_zorder=2, half=True, pitch_color='#0C0D0E',
-                              line_color='white', linewidth=0.75, axis=True, label=True)
-        pitch.draw(ax=ax)
-        return pitch
-
-    def plot_passes(self, ax, pitch, passes):
-        for x in passes.to_dict(orient='records'):
-            color = 'goldenrod' if x['pass_goal_assist'] else 'seagreen'
+    def add_key_item(self, ax, item):
+        ax.text(item['x_text'], item['y_text'], item['text'], fontsize=12, fontproperties=item['fontprops'], color='black', ha='left')
+        if 'x_scatter' in item:
+            ax.scatter(item['x_scatter'], item['y_scatter'], s=150, color=item['color'], edgecolor=item['color'], linewidth=0.8)
+            ax.arrow(item['x_scatter'], item['y_scatter'], dx=0.075, dy=0, width=0.02, head_length=0.02, color=item['color'], linewidth=1)
+            ax.text(item['x_scatter'], item['y_scatter']-0.009, s="19", fontsize=10, fontproperties=item['fontprops'], path_effects=self.path_eff, color='black', ha='center', va='center')
+    
+    def plot_events(self, ax, pitch, events, jersey_number):
+        for x in events.to_dict(orient='records'):
+            color = 'goldenrod' if x['pass_goal_assist'] == True else 'seagreen'
             pitch.scatter(x['location'][0], x['location'][1], s=125, color=color, ax=ax, linewidth=0.8, edgecolor=color)
-            pitch.arrows(x['location'][0], x['location'][1], x['pass_end_location'][0], x['pass_end_location'][1],
-                         color=color, ax=ax, width=2, headwidth=5, headlength=5, pivot='tail')
-            pitch.annotate(self.player_jersey, xy=(x['location'][0]-0.1, x['location'][1]), ax=ax, fontsize=8,
-                           fontproperties=self.font_props_light, path_effects=self.path_eff, color='white', ha='center')
+            pitch.arrows(x['location'][0], x['location'][1], x['pass_end_location'][0], x['pass_end_location'][1], color=color, ax=ax, width=2, headwidth=5, headlength=5, pivot='tail')
+            pitch.annotate(jersey_number, xy=(x['location'][0]-0.1, x['location'][1]), ax=ax, fontsize=8, fontproperties=self.font_props_light, path_effects=self.path_eff, color='black', ha='center', va='center')
+   
+    def create_recipient_stats_table(self, recipient_stats):
+        recipient_stats.rename(columns={
+            "recipient_name": "Recipient",
+            "pass_recipient_jersey_number": "Jersey #",
+            "shots_created": "Shots Assisted",
+            "goals_created": "Goals Assisted",
+            "total_xA": "Total xA"
+        }, inplace=True)
+        recipient_stats.reset_index(drop=True, inplace=True)
+        recipient_stats.index = recipient_stats.index + 1
+
+        styled_table = recipient_stats.style\
+            .set_table_styles([
+                {'selector': 'thead th',
+                 'props': [('background-color', 'red'),
+                           ('opacity', '0.7'),
+                           ('color', 'black'),
+                           ('font-weight', 'bold'),
+                           ('text-align', 'center')]}
+            ])\
+            .format({"Jersey #": "#{:.0f}", "Total xA": "{:.2f}"})
+        
+        return styled_table
     
-    def plot(self, player_passes):
-        ax1, ax2 = self.setup_axes()
-        self.add_title(ax1)
-        self.add_pass_key(ax1)
-        pitch = self.draw_pitch(ax2)
-        self.plot_passes(ax2, pitch, player_passes)
-        plt.show()
+    def calculate_player_metrics(self, players_with_assists):
+        player_metrics = players_with_assists.groupby(['player_name', 'team']).agg(
+            games_played=('match_id', 'nunique'),
+            passes_completed=('pass_outcome', lambda x: x.isna().sum()),
+            total_passes=('pass_outcome', lambda x: len(x)),
+            passes_complete_perc=('pass_outcome', lambda x: (x.isna().sum() / len(x)) * 100),  
+            chances_created=('pass_shot_assist', 'sum'),
+            goal_assists=('pass_goal_assist', 'sum'),
+            xA=('xA', 'sum'),
+            avg_pass_angle=('pass_angle', lambda x: abs(x).mean())
+        ).reset_index()
+        
+        player_metrics['games_played'] = player_metrics['games_played'].astype(int)        
+        player_metrics['goal_assists'] = player_metrics['goal_assists'].astype(int)
+        player_metrics['chances_created'] += player_metrics['goal_assists']
+        
+        player_metrics['avg_pass_angle'] = 3.14 - player_metrics['avg_pass_angle']
+        
+        player_metrics = player_metrics[player_metrics['goal_assists'] > 0].reset_index()
+        return player_metrics
     
+    def create_distribution_plot(self, player_metrics, selected_player):
+        fig = go.Figure()
+        metrics = ["games_played", "passes_completed", "passes_complete_perc", "chances_created", "goal_assists", "xA", "avg_pass_angle"]
+        
+        for metric in metrics:
+            fig.add_trace(go.Box(y=player_metrics[metric], name=metric, marker_color='lightgray'))
+        
+        selected_player_metrics = player_metrics[player_metrics['player_name'] == selected_player]
+        
+        for metric in metrics:
+            fig.add_trace(go.Scatter(y=[selected_player_metrics[metric].values[0]], x=[metric],
+                                     mode='markers', marker=dict(color='red', size=10),
+                                     name=f"{selected_player}"))
+        
+        fig.update_layout(
+            title_text=f"{selected_player}'s Performance Distribution",
+            yaxis_title="Metric Values",
+            xaxis_title="Metrics",
+            template="plotly_white"
+        )
+        
+        return fig
+
+class DistributionPlotPasses(Visual):
+    """
+    Creates a distribution plot for player run metrics.
+    """
+    def __init__(self, metrics, *args, **kwargs):
+        """
+        Initialize the distribution plot for player runs.
+
+        Args:
+            metrics (list): List of metrics to visualize.
+        """
+        self.metrics = metrics
+        self.marker_color = (
+            c for c in [Visual.white, Visual.bright_yellow, Visual.bright_blue]
+        )
+        self.marker_shape = (s for s in ["square", "hexagon", "diamond"])
+        super().__init__(*args, **kwargs)
+        self._setup_axes()
+        self.fig.update_layout(
+         paper_bgcolor=rgb_to_color(self.bg_gray),
+         plot_bgcolor=rgb_to_color(self.bg_gray),
+            legend=dict(
+                orientation="h",
+                font={
+                    "color": rgb_to_color(self.black),
+                    
+                }
+            ),
+            xaxis=dict(
+                    tickfont={
+                        "color": rgb_to_color(self.black, 0.5)
+                    }
+            )
+        )
+        
+    
+
+    def _setup_axes(self, labels=["Worse", "Average", "Better"]):
+        """
+        Set up the x and y axes for the plot.
+        """
+        self.fig.update_xaxes(
+            range=[-10.5, 10.5],
+            fixedrange=True,
+            tickmode="array",
+            tickvals=[-9, 0, 9],
+            ticktext=labels,
+            # color= 'black' #rgb_to_color(self.black)
+            tickfont=dict(color=rgb_to_color(self.black))
+        )
+        self.fig.update_yaxes(
+            showticklabels=False,
+            fixedrange=True,
+            gridcolor=rgb_to_color(self.light_gray),
+            zerolinecolor=rgb_to_color(self.light_gray)
+
+        )
+
+
+    def add_group_data(self, df_plot):
+        """
+        Add all players' data points to the plot.
+
+        Args:
+            df_plot (pd.DataFrame): DataFrame with all player metrics.
+        """
+        for i, metric in enumerate(self.metrics):
+            formatted_metric = metric.replace('_', ' ').title()
+            if metric == 'xA':
+                formatted_metric = 'xA'
+            elif metric == 'passes_complete_perc':
+                formatted_metric = 'Passes Completed %'
+            elif metric == 'avg_pass_angle':
+                formatted_metric = 'π - |Avg. Pass Angle|'
+                
+            # Generate hover text with player name and metric value
+            hover_text = df_plot.apply(
+                lambda row: f"Player: {row['player_name']}<br>{formatted_metric}: {row[metric]:.2f}" if pd.notnull(row[metric]) else f"Player: {row['player_name']}<br>{formatted_metric}: N/A",
+                axis=1
+            ).tolist()
+            
+            # Add scatter trace for this metric
+            self.fig.add_trace(
+                go.Scatter(
+                    x=df_plot[f"{metric}_Z"],
+                    y=np.ones(len(df_plot)) * i,
+                    mode="markers",
+                    marker=dict(
+                        color=rgb_to_color(self.table_red, opacity=0.4),
+                        size=10                                                
+                    ),
+                    hovertext=hover_text,  # Use hover text here
+                    name="Other players",
+                    showlegend=(i == 0),
+                )
+            )
+
+            # Add an annotation for the metric title on the left side of each row
+            self.fig.add_annotation(
+                x=0,  # Place the annotation outside the plot area on the left
+                y=i+0.5,
+                text=f"<b>{formatted_metric}</b>",
+                showarrow=False,
+                font=dict(
+                    color=rgb_to_color(self.black, 0.8),
+                    size=12 * self.font_size_multiplier,
+                    family="Arial",
+                    
+                ),
+                xref="x",
+                yref="y",
+                align="center",
+                xanchor="center"
+            )
+        
+    def add_player(self, player_metrics, player_name):
+        """
+        Add a specific player's metrics to the plot.
+
+        Args:
+            player_metrics (pd.Series): Player metrics for visualization.
+            player_name (str): Name of the player.
+        """
+        color = next(self.marker_color)
+        marker = next(self.marker_shape)
+
+        for i, metric in enumerate(self.metrics):
+            self.fig.add_trace(
+                go.Scatter(
+                    x=[player_metrics[f"{metric}_Z"]],
+                    y=[i],
+                    mode="markers",
+                    marker=dict(
+                        color=rgb_to_color(self.gray, opacity=0.7),
+                        size=12,
+                        symbol=marker,
+                        line_width=1.5,
+                        line_color=rgb_to_color(self.black)
+                    ),
+                    hovertemplate=f"{metric}: {player_metrics[metric]:.2f}",
+                    name=player_name,
+                    showlegend=(i == 0),
+                )
+            )
+
+    def add_title_from_player(self, player_name):
+        """
+        Add a title to the plot based on the player.
+
+        Args:
+            player_name (str): Name of the player.
+        """
+        self.fig.update_layout(
+            title={
+                "text": f"Pass Metrics Distribution for {player_name}",
+                "x": 0.5,
+                "xanchor": "center",
+            }
+        )

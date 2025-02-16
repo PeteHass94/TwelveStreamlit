@@ -725,3 +725,60 @@ class RunDescription(Description):
             "and conclude with a comparison to other players in the match."
         )
         return [{"role": "user", "content": prompt}]
+    
+class PassDescription(Description):
+    """
+    Description generator for player passing performance, incorporating visual insights.
+    """
+
+    @property
+    def gpt_examples_path(self):
+        return f"{self.gpt_examples_base}/PassExamples.xlsx"
+
+    @property
+    def describe_paths(self):
+        return [f"{self.describe_base}/PassExamples.xlsx"]
+
+    def __init__(self, player_name, pass_metrics, insights):
+        """
+        Initialize PassDescription with player metrics.
+
+        Args:
+            player_name (str): Name of the player.
+            pass_metrics (pd.Series): Series containing passing metrics.
+            insights (dict): Additional insights from visuals.
+        """
+        self.player_name = player_name
+        self.pass_metrics = pass_metrics
+        self.insights = insights
+        super().__init__()
+
+    def synthesize_text(self):
+        """
+        Create a text summary of the player's passing performance and insights.
+        """
+        description = (
+            f"Here are the passing statistics for {self.player_name}: "
+            f"{self.pass_metrics['total_passes']} total passes, "
+            f"pass completion rate of {self.pass_metrics['passes_complete_perc']:.1f}%, "
+            f"{self.pass_metrics['chances_created']} chances created, "
+            f"{self.pass_metrics['goal_assists']} goal assists, "
+            f"xA of {self.pass_metrics['xA']:.2f}, "
+            f"and an average pass angle of {self.pass_metrics['avg_pass_angle']:.2f} radians.\n\n"
+        )
+        description += f"Visual Insights:\n\n"
+        description += f"Pitch Plot Insights: {self.insights['pitch_insights']}\n\n"
+        description += f"Distribution Insights: {self.insights['distribution_insights']}\n\n"
+        return description
+    
+    def get_prompt_messages(self):
+        """
+        Prompt GPT to generate a concise summary of passing metrics.
+        """
+        prompt = (
+            "Using the statistical description enclosed with ```, "
+            "generate a concise, 4-sentence summary of the player's passing performance. "
+            "Start with an overview, highlight specific strengths, describe any weaknesses, "
+            "and conclude with a comparison to other players in the match."
+        )
+        return [{"role": "user", "content": prompt}]

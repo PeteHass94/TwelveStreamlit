@@ -67,8 +67,9 @@ def set_page_config():
 def add_page_selector():
     st.image("data/ressources/img/TwelveEdu.png")
     st.page_link("pages/about.py", label="About")
-    st.page_link("pages/run_analysis.py", label="CL 2018 run analysis")
     st.page_link("pages/euro_pass_analysis.py", label="Euro 24 pass analysis")
+    st.page_link("pages/run_analysis.py", label="CL 2018 run analysis")
+    
     # st.page_link("pages/football_scout.py", label="Football Scout")
     st.page_link("pages/embedder.py", label="Embdedding Tool")
     # st.page_link("pages/wvs_chat.py", label="World Value Survey")
