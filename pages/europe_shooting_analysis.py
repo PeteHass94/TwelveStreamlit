@@ -144,16 +144,6 @@ st.sidebar.markdown("""<span style='color: white;'>Only showing selection of pla
 # Filter players who have at least 1 goal assist
 players_with_assists = euro_passes.df[euro_passes.df['pass_goal_assist'] > 0]
 
-# # Extract unique teams
-# unique_teams = players_with_assists['team'].unique()
-
-# # Print the list of unique teams
-# print(unique_teams)
-
-# # If using Streamlit, display it
-# st.text(unique_teams)
-
-
 # Aggregate goal assists per player and ensure integers
 player_goal_assists = players_with_assists.groupby(['player_name', 'team'])['pass_goal_assist'].sum().reset_index()
 player_goal_assists['pass_goal_assist'] = player_goal_assists['pass_goal_assist'].astype(int)  # Convert to int
@@ -238,13 +228,6 @@ styled_table = plotter.create_recipient_stats_table(recipient_stats)
 
 st.subheader("Recipient Metrics")
 st.table(styled_table)
-
-from classes.visual import EuroPassVisualizer
-
-visualizer = EuroPassVisualizer(euro_passes.df)
-visualizer.plot_xa_treemap(selected_player=selected_player)
-
-
 
 st.divider()
 

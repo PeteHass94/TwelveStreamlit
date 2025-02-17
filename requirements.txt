@@ -11,3 +11,4 @@ tiktoken
 python-jose==3.3.0
 customerio==2.1
 mplsoccer==1.4.0
+squarify==0.44

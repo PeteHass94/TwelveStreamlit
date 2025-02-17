@@ -868,63 +868,142 @@ class PitchPlot:
         
         return fig
 
+import plotly.express as px
+from collections import defaultdict
+import textwrap
+
+class EuroPassVisualizer:
+    def __init__(self, df):
+        self.df = df
+        self.team_colors = self._generate_team_colors()
+    
+    def _generate_team_colors(self):
+        """Assigns unique colors to each team based on national team colors."""
+        team_colors = {
+            'England': '#00247D', 'Spain': '#FFCC00', 'France': '#0055A4', 'Turkey': '#E30A17',
+            'Netherlands': '#FF6600', 'Austria': '#ED2939', 'Denmark': '#C60C30', 'Germany': '#000000',
+            'Slovakia': '#005BAC', 'Switzerland': '#D52B1E', 'Hungary': '#436F4D', 'Albania': '#E41B17',
+            'Croatia': '#FF0000', 'Italy': '#008C45', 'Poland': '#DC143C', 'Ukraine': '#FFD700',
+            'Georgia': '#FF0000', 'Romania': '#FFD700', 'Belgium': '#FAAB18', 'Portugal': '#006600',
+            'Slovenia': '#0093DD', 'Serbia': '#C63633', 'Scotland': '#002147', 'Czech Republic': '#D7141A'
+        }
+        return team_colors
+    
+    def _custom_wrap(self, s, width=10):
+        """Wrap text with line breaks for better display in treemap."""
+        return "<br>".join(textwrap.wrap(s, width=width))
+    
+    def plot_xa_treemap(self, selected_player=None):
+        """Generates a treemap showing xA sum for each team and player using Plotly."""
+        players_with_assists = self.df #[self.df['pass_goal_assist'] > 0]
+        players_xa = players_with_assists.groupby(['team', 'player_name'])['xA'].sum().reset_index()
+        team_xa = players_with_assists.groupby('team')['xA'].sum().reset_index()
+        
+        team_xa['color'] = team_xa['team'].map(self.team_colors)
+        
+        players_xa['color'] = players_xa['team'].map(self.team_colors)
+        if selected_player:
+            players_xa.loc[players_xa['player_name'] == selected_player, 'color'] = '#808080'  # Highlight selected player in grey
+            
+        players_xa['player_name'] = players_xa['player_name'].apply(self._custom_wrap)
+        
+        fig1 = px.treemap(
+            team_xa, 
+            path=[px.Constant("all"), 'team'], 
+            values='xA', 
+            color='team', 
+            color_discrete_map=self.team_colors,
+            height=500
+        )
+        
+        players_xa = players_xa[players_xa['xA'] >= 1]
+        
+        fig2 = px.treemap(
+            players_xa, 
+            path=[px.Constant("all"), 'player_name'], 
+            values='xA', 
+            color='team', 
+            color_discrete_map=self.team_colors,
+            height=900
+        )
+        
+        fig1.update_traces(root_color="lightgrey", textfont=dict(size=12, family="Arial"))
+        fig1.update_layout(margin=dict(t=20, l=5, r=5, b=20), uniformtext=dict(minsize=8, mode='show'))
+        
+        fig2.update_traces(root_color="lightgrey", textfont=dict(size=12, family="Arial"))
+        fig2.update_layout(margin=dict(t=20, l=5, r=5, b=20), uniformtext=dict(minsize=8, mode='show'))
+        
+        st.plotly_chart(fig1)
+        st.plotly_chart(fig2)
+
+
+from plotly.subplots import make_subplots
+
 class DistributionPlotPasses(Visual):
     """
-    Creates a distribution plot for player run metrics.
+    Creates a distribution plot for player pass metrics with two subplots.
     """
     def __init__(self, metrics, *args, **kwargs):
         """
-        Initialize the distribution plot for player runs.
-
+        Initialize the distribution plot with two sections.
+        
         Args:
             metrics (list): List of metrics to visualize.
         """
         self.metrics = metrics
-        self.marker_color = (
-            c for c in [Visual.white, Visual.bright_yellow, Visual.bright_blue]
-        )
+        self.counted_stats = ["games_played", "passes_completed", "chances_created", "goal_assists"]
+        self.calculated_stats = ["passes_complete_perc", "avg_pass_angle", "xA"]
+        
+        self.marker_color = (c for c in [Visual.white, Visual.bright_yellow, Visual.bright_blue])
         self.marker_shape = (s for s in ["square", "hexagon", "diamond"])
+        
         super().__init__(*args, **kwargs)
-        self._setup_axes()
-        self.fig.update_layout(
-         paper_bgcolor=rgb_to_color(self.bg_gray),
-         plot_bgcolor=rgb_to_color(self.bg_gray),
-            legend=dict(
-                orientation="h",
-                font={
-                    "color": rgb_to_color(self.black),
-                    
-                }
-            ),
-            xaxis=dict(
-                    tickfont={
-                        "color": rgb_to_color(self.black, 0.5)
-                    }
-            )
+
+        # Correctly create subplots to allow row and column referencing
+        self.fig = make_subplots(
+            rows=2, cols=1,
+            subplot_titles=("Counted Stats", "Calculated Stats"),
+            shared_xaxes=True,
+            vertical_spacing=0.15
         )
         
+        self._setup_axes()
+        
+        self.fig.update_layout(
+            paper_bgcolor=rgb_to_color(self.bg_gray),
+            plot_bgcolor=rgb_to_color(self.bg_gray),
+            legend=dict(
+                orientation="h",
+                font={"color": rgb_to_color(self.black)},
+                x=0.5,
+                xanchor="center"                
+            ),
+            xaxis=dict(
+                tickfont={"color": rgb_to_color(self.black, 0.5)}
+            )
+        )
     
-
     def _setup_axes(self, labels=["Worse", "Average", "Better"]):
         """
         Set up the x and y axes for the plot.
         """
-        self.fig.update_xaxes(
-            range=[-10.5, 10.5],
-            fixedrange=True,
-            tickmode="array",
-            tickvals=[-9, 0, 9],
-            ticktext=labels,
-            # color= 'black' #rgb_to_color(self.black)
-            tickfont=dict(color=rgb_to_color(self.black))
-        )
-        self.fig.update_yaxes(
-            showticklabels=False,
-            fixedrange=True,
-            gridcolor=rgb_to_color(self.light_gray),
-            zerolinecolor=rgb_to_color(self.light_gray)
-
-        )
+        for i in range(1, 3):  # 1 = counted stats, 2 = calculated stats
+            self.fig.update_xaxes(
+                range=[-10.5, 10.5],
+                fixedrange=True,
+                tickmode="array",
+                tickvals=[-8, 0, 8],
+                ticktext=labels,
+                tickfont=dict(color=rgb_to_color(self.black)),
+                row=i, col=1
+            )
+            self.fig.update_yaxes(
+                showticklabels=False,
+                fixedrange=True,
+                gridcolor=rgb_to_color(self.light_gray),
+                zerolinecolor=rgb_to_color(self.light_gray),
+                row=i, col=1
+            )
 
 
     def add_group_data(self, df_plot):
@@ -942,45 +1021,42 @@ class DistributionPlotPasses(Visual):
                 formatted_metric = 'Passes Completed %'
             elif metric == 'avg_pass_angle':
                 formatted_metric = 'π - |Avg. Pass Angle|'
-                
-            # Generate hover text with player name and metric value
+
+            # Assign metric to correct subplot row
+            row = 1 if metric in self.counted_stats else 2
+
             hover_text = df_plot.apply(
-                lambda row: f"Player: {row['player_name']}<br>{formatted_metric}: {row[metric]:.2f}" if pd.notnull(row[metric]) else f"Player: {row['player_name']}<br>{formatted_metric}: N/A",
+                lambda row: f"Player: {row['player_name']}<br>{formatted_metric}: {row[metric]:.2f}" 
+                if pd.notnull(row[metric]) else f"Player: {row['player_name']}<br>{formatted_metric}: N/A",
                 axis=1
             ).tolist()
-            
-            # Add scatter trace for this metric
+
+            # Add scatter trace to the correct row
             self.fig.add_trace(
                 go.Scatter(
                     x=df_plot[f"{metric}_Z"],
                     y=np.ones(len(df_plot)) * i,
                     mode="markers",
-                    marker=dict(
-                        color=rgb_to_color(self.table_red, opacity=0.4),
-                        size=10                                                
-                    ),
-                    hovertext=hover_text,  # Use hover text here
+                    marker=dict(color=rgb_to_color(self.table_red, opacity=0.4), size=10),
+                    hovertext=hover_text,
                     name="Other players",
                     showlegend=(i == 0),
-                )
+                ),
+                row=row, col=1  # Ensuring traces are assigned to the correct subplot
             )
 
-            # Add an annotation for the metric title on the left side of each row
+            # Add metric annotation
             self.fig.add_annotation(
-                x=0,  # Place the annotation outside the plot area on the left
+                x=0,  # Shift annotation outside the plot
                 y=i+0.5,
                 text=f"<b>{formatted_metric}</b>",
                 showarrow=False,
-                font=dict(
-                    color=rgb_to_color(self.black, 0.8),
-                    size=12 * self.font_size_multiplier,
-                    family="Arial",
-                    
-                ),
+                font=dict(color=rgb_to_color(self.black, 0.8), size=12 * self.font_size_multiplier, family="Arial"),
                 xref="x",
                 yref="y",
                 align="center",
-                xanchor="center"
+                xanchor="center",
+                row=row, col=1
             )
         
     def add_player(self, player_metrics, player_name):
@@ -995,6 +1071,8 @@ class DistributionPlotPasses(Visual):
         marker = next(self.marker_shape)
 
         for i, metric in enumerate(self.metrics):
+            row = 1 if metric in self.counted_stats else 2
+
             self.fig.add_trace(
                 go.Scatter(
                     x=[player_metrics[f"{metric}_Z"]],
@@ -1010,7 +1088,8 @@ class DistributionPlotPasses(Visual):
                     hovertemplate=f"{metric}: {player_metrics[metric]:.2f}",
                     name=player_name,
                     showlegend=(i == 0),
-                )
+                ),
+                row=row, col=1  # Assign trace to correct subplot
             )
 
     def add_title_from_player(self, player_name):
