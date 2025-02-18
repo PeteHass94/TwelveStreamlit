@@ -239,10 +239,12 @@ styled_table = plotter.create_recipient_stats_table(recipient_stats)
 st.subheader("Recipient Metrics")
 st.table(styled_table)
 
+st.write(selected_player)
+
 from classes.visual import EuroPassVisualizer
 
 visualizer = EuroPassVisualizer(euro_passes.df)
-visualizer.plot_xa_treemap(selected_player=selected_player)
+visualizer.plot_xa_stacked_barchart(selected_player=selected_player)
 
 
 

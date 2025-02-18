@@ -889,52 +889,60 @@ class EuroPassVisualizer:
         }
         return team_colors
     
-    def _custom_wrap(self, s, width=10):
-        """Wrap text with line breaks for better display in treemap."""
+    def _custom_wrap(self, s, width=30):
+        """Wrap text with line breaks for better display in charts."""
         return "<br>".join(textwrap.wrap(s, width=width))
     
-    def plot_xa_treemap(self, selected_player=None):
-        """Generates a treemap showing xA sum for each team and player using Plotly."""
-        players_with_assists = self.df #[self.df['pass_goal_assist'] > 0]
-        players_xa = players_with_assists.groupby(['team', 'player_name'])['xA'].sum().reset_index()
-        team_xa = players_with_assists.groupby('team')['xA'].sum().reset_index()
+    def plot_xa_stacked_barchart(self, selected_player=None):
+        """Generates a stacked bar chart showing xA sum for each team and player using Plotly."""
+        print(selected_player)
         
-        team_xa['color'] = team_xa['team'].map(self.team_colors)
+        players_with_xA = self.df[self.df['xA'] > 0].copy()
         
+        # Add opponent column
+        players_with_xA['opponent'] = players_with_xA.apply(
+            lambda row: row['home_team'] if row['team'] != row['home_team'] else row['away_team'], axis=1
+        )
+        
+        # Add shot description column
+        players_with_xA['shot_description'] = players_with_xA.apply(
+            lambda row: f"{row['recipient_name']} Vs {row['opponent']} in {row['competition_stage']}, xA: {row['xA']:.2f}", axis=1
+        )
+        
+        players_xa = players_with_xA.groupby(['team', 'player_name'])['xA'].sum().reset_index()
+        team_xa = players_with_xA.groupby('team')['xA'].sum().reset_index().sort_values(by='xA', ascending=False)
+        
+        # players_xa['player'] = players_xa['player'].apply(self._custom_wrap)
         players_xa['color'] = players_xa['team'].map(self.team_colors)
+        
+        # Default selected team is the team of the selected player
+        default_team = None
         if selected_player:
-            players_xa.loc[players_xa['player_name'] == selected_player, 'color'] = '#808080'  # Highlight selected player in grey
-            
-        players_xa['player_name'] = players_xa['player_name'].apply(self._custom_wrap)
+            default_team = players_xa.loc[players_xa['player_name'] == selected_player, 'team'].values[0]
         
-        fig1 = px.treemap(
-            team_xa, 
-            path=[px.Constant("all"), 'team'], 
-            values='xA', 
-            color='team', 
-            color_discrete_map=self.team_colors,
-            height=500
+        selected_teams = st.multiselect(
+            "Select teams:", options=team_xa['team'].tolist(), default=[default_team] if default_team else []
         )
         
-        players_xa = players_xa[players_xa['xA'] >= 1]
+        filtered_data = players_xa[players_xa['team'].isin(selected_teams)]
         
-        fig2 = px.treemap(
-            players_xa, 
-            path=[px.Constant("all"), 'player_name'], 
-            values='xA', 
+        fig = px.bar(
+            filtered_data, 
+            x='team', 
+            y='xA', 
             color='team', 
+            text='player_name', 
             color_discrete_map=self.team_colors,
-            height=900
+            orientation='v',
+            height=800,
+            hover_name='player_name',
+            hover_data={'xA': True, 'team': False}
         )
         
-        fig1.update_traces(root_color="lightgrey", textfont=dict(size=12, family="Arial"))
-        fig1.update_layout(margin=dict(t=20, l=5, r=5, b=20), uniformtext=dict(minsize=8, mode='show'))
+        fig.update_layout(barmode='stack', xaxis_title='Expected Assists (xA)', yaxis_title='Team', uniformtext_minsize=8, uniformtext_mode='hide')
         
-        fig2.update_traces(root_color="lightgrey", textfont=dict(size=12, family="Arial"))
-        fig2.update_layout(margin=dict(t=20, l=5, r=5, b=20), uniformtext=dict(minsize=8, mode='show'))
+        st.plotly_chart(fig)
         
-        st.plotly_chart(fig1)
-        st.plotly_chart(fig2)
 
 
 from plotly.subplots import make_subplots
