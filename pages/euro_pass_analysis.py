@@ -239,14 +239,16 @@ styled_table = plotter.create_recipient_stats_table(recipient_stats)
 st.subheader("Recipient Metrics")
 st.table(styled_table)
 
-st.write(selected_player)
+st.subheader("Player xA Contribution Compared to Their Team")
 
 from classes.visual import EuroPassVisualizer
 
 visualizer = EuroPassVisualizer(euro_passes.df)
-visualizer.plot_xa_stacked_barchart(selected_player=selected_player)
+team_rank, overall_rank = visualizer.plot_xa_stacked_barchart(selected_player=selected_player)
 
+st.text(f"For total xA, {selected_player}'s Team Rank: {team_rank} and Overall Rank: {overall_rank}.")
 
+xA_insights = visualizer.summarize_xa_insights(selected_player)
 
 st.divider()
 
@@ -307,7 +309,8 @@ description_text = (
     f"with a pass completion rate of **{selected_player_data['passes_complete_perc']:.1f}%**. "
     f"They created **{selected_player_data['chances_created']} chances** and provided **{selected_player_data['goal_assists']} goal assists**. "
     f"Their expected assists (xA) value was **{selected_player_data['xA']:.2f}**, "
-    f"with an average pass angle of **{selected_player_data['avg_pass_angle']:.2f} radians**."
+    f"with an average pass angle of **{selected_player_data['avg_pass_angle']:.2f} radians**. "
+    f"{selected_player} ranks **{team_rank}** in their team and **{overall_rank}** overall for expected assists (xA)."
 )
 
 
@@ -323,7 +326,8 @@ all_insights = {
     "description_text": description_text,
     "passing_insights": passing_summaries["passing_insights"],
     "distribution_insights": distribution_summary,
-    "pitch_insights": pitch_summary
+    "pitch_insights": pitch_summary,
+    "xa_insights": xA_insights
 }
 
 # Create chat with insights

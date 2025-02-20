@@ -881,7 +881,7 @@ class EuroPassVisualizer:
         """Assigns unique colors to each team based on national team colors."""
         team_colors = {
             'England': '#00247D', 'Spain': '#FFCC00', 'France': '#0055A4', 'Turkey': '#E30A17',
-            'Netherlands': '#FF6600', 'Austria': '#ED2939', 'Denmark': '#C60C30', 'Germany': '#000000',
+            'Netherlands': '#FF6600', 'Austria': '#ED2939', 'Denmark': '#C60C30', 'Germany': '#ffffff',
             'Slovakia': '#005BAC', 'Switzerland': '#D52B1E', 'Hungary': '#436F4D', 'Albania': '#E41B17',
             'Croatia': '#FF0000', 'Italy': '#008C45', 'Poland': '#DC143C', 'Ukraine': '#FFD700',
             'Georgia': '#FF0000', 'Romania': '#FFD700', 'Belgium': '#FAAB18', 'Portugal': '#006600',
@@ -904,45 +904,110 @@ class EuroPassVisualizer:
             lambda row: row['home_team'] if row['team'] != row['home_team'] else row['away_team'], axis=1
         )
         
+        # Add chances created column, handling NaN values
+        players_with_xA['Chances Created'] = (
+            players_with_xA['pass_shot_assist'].fillna(0).astype(int) + 
+            players_with_xA['pass_goal_assist'].fillna(0).astype(int)
+        )
+        
         # Add shot description column
         players_with_xA['shot_description'] = players_with_xA.apply(
             lambda row: f"{row['recipient_name']} Vs {row['opponent']} in {row['competition_stage']}, xA: {row['xA']:.2f}", axis=1
         )
         
-        players_xa = players_with_xA.groupby(['team', 'player_name'])['xA'].sum().reset_index()
+        players_xa = players_with_xA.groupby(['team', 'player_name'])[['xA', 'Chances Created']].sum().reset_index()
         team_xa = players_with_xA.groupby('team')['xA'].sum().reset_index().sort_values(by='xA', ascending=False)
         
-        # players_xa['player'] = players_xa['player'].apply(self._custom_wrap)
-        players_xa['color'] = players_xa['team'].map(self.team_colors)
+        players_xa = players_xa.rename(columns={'player_name': 'Player', 'team': 'Team'})
+        players_xa['Player'] = players_xa['Player'].apply(self._custom_wrap)
+        players_xa['color'] = players_xa['Team'].map(self.team_colors)
+        
+        # Rank players by xA
+        players_xa['Overall Rank'] = players_xa['xA'].rank(method='min', ascending=False).astype(int)
+        players_xa['Team Rank'] = players_xa.groupby('Team')['xA'].rank(method='min', ascending=False).astype(int)
+        
+        # Retrieve ranks for selected player
+        team_rank, overall_rank = None, None
+        if selected_player:
+            selected_data = players_xa[players_xa['Player'] == selected_player]
+            if not selected_data.empty:
+                team_rank = selected_data['Team Rank'].values[0]
+                overall_rank = selected_data['Overall Rank'].values[0]
+        
+        # Add shot description column
+        players_xa['player_text'] = players_xa.apply(
+            lambda row: f"{row['Player']}<br>xA: {row['xA']:.2f}", axis=1
+        )
+        
+        # Sort players by xA so highest is at the bottom of the stack
+        players_xa = players_xa.sort_values(by='xA', ascending=False)
+        
+        with st.expander(f"Euro Passes xA Bar chart Dataframe "):
+            st.write(players_xa)
         
         # Default selected team is the team of the selected player
         default_team = None
         if selected_player:
-            default_team = players_xa.loc[players_xa['player_name'] == selected_player, 'team'].values[0]
+            default_team = players_xa.loc[players_xa['Player'] == selected_player, 'Team'].values[0]
         
         selected_teams = st.multiselect(
             "Select teams:", options=team_xa['team'].tolist(), default=[default_team] if default_team else []
         )
         
-        filtered_data = players_xa[players_xa['team'].isin(selected_teams)]
+        filtered_data = players_xa[players_xa['Team'].isin(selected_teams)]
+        
+        pattern_shape_sequence = []
+        pattern_shape_sequence = ["" if player != selected_player else "/" for player in filtered_data['Player']]
+        
+        
         
         fig = px.bar(
             filtered_data, 
-            x='team', 
+            x='Team', 
             y='xA', 
-            color='team', 
-            text='player_name', 
+            color='Team', 
+            text='player_text', 
             color_discrete_map=self.team_colors,
             orientation='v',
-            height=800,
-            hover_name='player_name',
-            hover_data={'xA': True, 'team': False}
+            height=500,
+            hover_name='Player',
+            hover_data={'Player': False, 'xA': True, 'Team': False, 'Chances Created': True, 'player_text': False, 'Team Rank': True, 'Overall Rank': True},
+            pattern_shape='Player',
+            pattern_shape_sequence=pattern_shape_sequence
         )
         
-        fig.update_layout(barmode='stack', xaxis_title='Expected Assists (xA)', yaxis_title='Team', uniformtext_minsize=8, uniformtext_mode='hide')
+        fig.update_traces(marker=dict(line_width=1.5, line_color="grey"), textposition="inside")
+        
+        fig.update_layout(barmode='stack', xaxis_title='Teams', yaxis_title='Expected Assists (xA)', uniformtext_minsize=8, uniformtext_mode='hide', showlegend=False)
+        
         
         st.plotly_chart(fig)
         
+        return team_rank, overall_rank
+    
+    def summarize_xa_insights(self, selected_player):
+        """Summarizes key insights from xA rankings."""
+        players_with_xA = self.df[self.df['xA'] > 0].copy()
+        
+        players_xa = players_with_xA.groupby(['team', 'player_name'])[['xA']].sum().reset_index()
+        
+        # Rank players by xA
+        players_xa['Overall Rank'] = players_xa['xA'].rank(method='min', ascending=False).astype(int)
+        players_xa['Team Rank'] = players_xa.groupby('team')['xA'].rank(method='min', ascending=False).astype(int)
+        
+        # Retrieve ranks for selected player
+        selected_data = players_xa[players_xa['player_name'] == selected_player]
+        if not selected_data.empty:
+            team_rank = selected_data['Team Rank'].values[0]
+            overall_rank = selected_data['Overall Rank'].values[0]
+        else:
+            return {"xA_insights": f"No xA data available for {selected_player}."}
+        
+        xA_insights = (
+            f"{selected_player} ranks **{team_rank}** in their team and **{overall_rank}** overall for expected assists (xA)."
+        )
+        
+        return xA_insights
 
 
 from plotly.subplots import make_subplots
