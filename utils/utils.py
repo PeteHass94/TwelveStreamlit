@@ -339,3 +339,44 @@ def plot_radar(player_runs, player_name):
     ax.legend(loc='lower left', bbox_to_anchor=(-0.08, -0.09), fontsize=10)
 
     return fig
+
+import pandas as pd
+import json
+from sklearn.linear_model import LogisticRegression
+
+# Load JSON data into a DataFrame
+def load_data(filepath: str) -> pd.DataFrame:
+    with open(filepath, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return pd.DataFrame(data)
+
+# Calculate Expected Goals (xG) based on shot data
+def calculate_xG(events_df: pd.DataFrame, players_df: pd.DataFrame) -> pd.DataFrame:
+    shots = events_df[events_df["eventType"] == "Shot"]
+    shots["xG"] = np.random.rand(len(shots))  # Placeholder for real xG model
+    return shots[["playerId", "xG"]]
+
+# Calculate Expected Threat (xT) from passes and dribbles
+def calculate_xT(events_df: pd.DataFrame) -> pd.DataFrame:
+    passes = events_df[events_df["eventType"] == "Pass"]
+    passes["xT"] = np.random.rand(len(passes))  # Placeholder for real xT model
+    return passes[["playerId", "xT"]]
+
+# Calculate Expected Carry Value (xCarry) based on movement after receiving a pass
+def calculate_xCarry(events_df: pd.DataFrame, xT_df: pd.DataFrame, xG_df: pd.DataFrame, players_df: pd.DataFrame) -> pd.DataFrame:
+    carries = events_df[events_df["eventType"] == "Carry"]
+    carries["xCarry"] = np.random.rand(len(carries))  # Placeholder for real xCarry model
+    return carries[["playerId", "xCarry"]]
+
+# Train a model to predict xCarry
+def train_xCarry_model(xCarry_data: pd.DataFrame):
+    model = LogisticRegression()
+    X = xCarry_data[["xCarry"]]
+    y = (xCarry_data["xCarry"] > xCarry_data["xCarry"].mean()).astype(int)
+    model.fit(X, y)
+    return model
+
+# Load European player data
+def load_european_data(leagues: list) -> pd.DataFrame:
+    # Placeholder: Load relevant European league data
+    return pd.DataFrame({"player_name": ["Player1", "Player2"], "xCarry": [0.8, 1.2]})

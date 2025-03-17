@@ -1179,3 +1179,342 @@ class DistributionPlotPasses(Visual):
                 "xanchor": "center",
             }
         )
+
+from mplsoccer import Pitch
+from matplotlib.lines import Line2D
+import math
+
+class ShotMap(Visual):    
+    """
+    Class to visualize shot data using Streamlit and mplsoccer.
+    """
+    def __init__(self, shot_data):
+        """
+        Initialize with shot data.
+        
+        Parameters:
+            shot_data (DataFrame): Data containing shot locations and player/team info.
+        """
+        self.shot_data = shot_data
+        self.shot_data['color'] = np.where(self.shot_data['Goal'], 'green', 
+                                 np.where(self.shot_data['shot_on_target'], 'yellow', 'red'))
+        self.model_variables = ['shot_Angle_value', "b_intercept", 'shot_Distance_value', 'shot_X_value', 'shot_C_value', 'shot_D2_value', 'shot_AX_value', 'shot_preferred_foot_value', 'shot_in_box_value']
+        self.op_columns = ["b_intercept", "shot_Angle_value", "shot_b_Angle", "shot_Distance_value", "shot_b_Distance", "shot_X_value", "shot_b_X", "shot_C_value", "shot_b_C", "shot_D2_value", "shot_b_D2", "shot_AX_value", "shot_b_AX", "shot_preferred_foot_value", "shot_b_preferred_foot", "shot_in_box_value", "shot_b_in_box"]
+        self.fk_columns = ["b_intercept", "shot_Angle_value", "shot_b_Angle", "shot_Distance_value", "shot_b_Distance", "shot_X_value", "shot_b_X", "shot_C_value", "shot_b_C", "shot_D2_value", "shot_b_D2", "shot_AX_value", "shot_b_AX"]
+        self.pk_columns = ["b_intercept","shot_Angle_value", "shot_b_Angle", "shot_Distance_value", "shot_b_Distance"]
+        
+
+    def filter_data(self, df, team: str, player: str):
+        """
+        Filters shot data based on selected team and player.
+        
+        Parameters:
+            team (str): Selected team.
+            player (str): Selected player.
+        
+        Returns:
+            DataFrame: Filtered shot data.
+        """
+        
+        if team:
+            df = df[df['teamName'] == team]
+        if player:
+            df = df[df['playerName'] == player]
+        return df
+
+    # Plotting function
+    def plot_shots(self, df, df2, ax, pitch):
+        
+        # Plot the scatter plot of shots
+        pitch.scatter(df['X'], df['Y'], ax=ax, s=400*df['xG'].apply(math.sqrt), c=df['color'], edgecolors='black', alpha=1, zorder=2)
+        
+        # Plot the scatter plot of shots
+        pitch.scatter(df2['X'], df2['Y'], ax=ax, s=400*df2['xG'].apply(math.sqrt), c='dimgrey', alpha=0.2, zorder=1.5)
+    
+        # Ensure the columns are all the same length and drop NaNs
+        # df = df.dropna(subset=['oldX', 'Y'])  # Drop rows where any of the key columns are missing
+        
+        # Create arrays for xend and yend with the same length as df
+        xend = np.full_like(df['X'], 105)  # Assuming pitch length is 105
+        yend_top = np.full_like(df['Y'], 34 + 7.32/2)  # Top corner of the goal
+        yend_bottom = np.full_like(df['Y'], 34 - 7.32/2)  # Bottom corner of the goal
+
+        # Plot arrows to the top corner of the goal
+        pitch.arrows(
+            df['X'], 
+            df['Y'],
+            xend,
+            yend_top, 
+            color='black', 
+            alpha=.95,
+            ax=ax,
+            width=2,
+            linewidth=2,
+            headlength=0,
+            headwidth=1
+        )
+
+        # Plot arrows to the bottom corner of the goal
+        pitch.arrows(
+            df['X'], 
+            df['Y'],
+            xend,
+            yend_bottom, 
+            color='black', 
+            alpha=.95,
+            ax=ax,
+            width=2,
+            linewidth=2,
+            headlength=0,
+            headwidth=1
+        )  
+    
+    def display_shot_map(self):
+        """
+        Displays the shot map in Streamlit.
+        """
+        st.subheader("Wyscout 2017/18 England Shot Map")
+        st.subheader("Filter to any team/player to see all their shots taken!")
+        
+        #df = self.shot_data[['teamName', 'playerName', 'X', 'Y', 'xG', 'shot_on_target', 'Goal', 'color', 'shot_label']].reset_index(drop=True)
+        df = self.shot_data
+        
+        DEFAULT = '< PICK A VALUE >'
+        
+        team = st.selectbox("Select a team", df.sort_values(by='xG', ascending=False)['teamName'].unique(), index=2)
+        player = st.selectbox("Select a player", 
+                      df[df['teamName'] == team].sort_values(by='xG', ascending=False)['playerName'].unique(), 
+                      placeholder=DEFAULT)
+
+        # team = st.selectbox("Select a team", df['teamName'].sort_values(by='xG', ascending=False).unique(), placeholder=DEFAULT)
+        # player = st.selectbox("Select a player", df[df['teamName'] == team]['playerName'].sort_values(by='xG', ascending=False).unique(), placeholder=DEFAULT)
+        
+        filtered_df = self.filter_data(df, team, player)
+
+        filtered_df = filtered_df.sort_values(by='xG', ascending=False)
+        
+        
+        # Multiselect for individual shots
+        shotLabels = st.multiselect(
+            "Select shot(s)", 
+            filtered_df['shot_label'].tolist(), 
+            placeholder="Choose one or more shots",
+            default=filtered_df['shot_label'].iloc[0]
+        )
+        
+        # If shots are selected, filter the dataframe to only those shots
+        if shotLabels:
+            selected_shots_df = filtered_df[filtered_df['shot_label'].isin(shotLabels)]
+        else:
+            selected_shots_df = filtered_df
+
+        # Calculate total shots, shots on target, and goals
+        total_shots = len(filtered_df)
+        total_on_target = filtered_df['shot_on_target'].sum()
+        total_goals = filtered_df['Goal'].sum()
+        
+        # Draw the pitch and plot the filtered shots
+        pitch = VerticalPitch(pitch_type='custom', pitch_length=105, pitch_width=68, line_zorder=1, pitch_color='#aabb97', stripe_color='#c2d59d', stripe=True, 
+                            line_color='white', half=True, axis=True, label=True)
+        fig, ax = pitch.draw(figsize=(10, 10))
+        self.plot_shots(selected_shots_df, filtered_df, ax, pitch)
+
+        # Add custom legend for the colors
+        legend_elements = [
+            Line2D([0], [0], marker='o', color='w', label='Goal (Green)', markerfacecolor='green', markersize=10, markeredgecolor='black'),
+            Line2D([0], [0], marker='o', color='w', label='On Target (Yellow)', markerfacecolor='yellow', markersize=10, markeredgecolor='black'),
+            Line2D([0], [0], marker='o', color='w', label='Off Target (Red)', markerfacecolor='red', markersize=10, markeredgecolor='black')
+        ]
+
+        # Add the legend to the plot
+        ax.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, -0.125), ncol=3, fontsize=12)
+        
+        # Add text annotations for total shots, on target shots, and goals
+        fig.text(0.25, 0.9, f'Total Shots: {total_shots}', ha='center', fontsize=14)
+        fig.text(0.5, 0.9, f'Total Shots on Target: {total_on_target:.0f}', ha='center', fontsize=14)
+        fig.text(0.75, 0.9, f'Total Goals: {total_goals}', ha='center', fontsize=14)
+        
+        st.pyplot(fig)
+        
+        # Function to show how xG is calculated
+
+               
+        # Show how xG is calculated for each selected shot
+        if shotLabels:
+            st.subheader("xG Calculation Breakdown for Selected Shots:")
+            st.latex(r'''xG =  \frac{1}{1 + e^{(\beta_0 + \beta_1 x_1 + \cdots + \beta_i x_i )}}''')
+            for idx, shot_label in enumerate(shotLabels):
+                shot_row = filtered_df[filtered_df['shot_label'] == shot_label].iloc[0]
+                calculation = self.show_xg_calculation(shot_row)
+                st.write(f"**Shot {idx + 1}:** {shot_label} - {shot_row['shot_type']}")
+                st.markdown(calculation)
+            st.text("Note: Angle is in Radians, X is horizontal distance from goal,\nC is distance from centre of the pitch, AX is Angle multipled by X,\nDA is distance time angle, preferred foot is found using players dataframe")
+        else:
+            st.write("No shots selected.")
+        
+    def show_xg_calculation(self, row):
+        """
+        Generates a readable breakdown of xG calculation for a selected shot.
+        """
+        shot_type = row['shot_type']
+        if shot_type in ["Open Play - Header", "Open Play - Non-header"]:
+            columns = self.op_columns
+        elif shot_type == "Free Kick":
+            columns = self.fk_columns
+        elif shot_type == "Penalty":
+            columns = self.pk_columns
+        else:
+            return "Unknown shot type."
+    
+        def format_variable_name(variable):
+            parts = variable.split("_")
+            if len(parts) > 2:
+                return " ".join(parts[1:-1])
+            return variable
+        
+        terms = [f"{row.get('b_intercept', 0):.4f} (Intercept)"]
+        for i in range(1, len(columns), 2):
+            if i + 1 < len(columns) and columns[i] in row and columns[i + 1] in row:
+                variable_name = format_variable_name(columns[i])
+                terms.append(f"+ {row[columns[i + 1]]:.2f} * {variable_name} ({row[columns[i]]:.2f})")
+        # terms.append(f" = {row['xG']:.4f}")       
+        terms = " ".join(terms)
+        
+        calculation = f"xG = 1 / 1 + $exp(${terms}$)$"
+        calculation = calculation + f" = {row['xG']:.2f}"
+        return calculation
+        
+        
+class ThreatMap(Visual):
+    """
+    Class to visualize possession chains that end in shots and calculate expected threat (xT).
+    """
+    def __init__(self, possession_data):
+        """
+        Initialize with possession chain data.
+        
+        Parameters:
+            possession_data (DataFrame): Data containing possession chains and xT metrics.
+        """
+        self.possession_data = possession_data
+
+    def display_threat_map(self):
+        """
+        Displays the possession chain visualization and expected threat metrics in Streamlit.
+        """
+        # st.title("Expected Threat Calculation xT")
+        st.subheader("Visualising possession chains to show how expected threat is in use")
+        
+        
+        
+        
+        df = self.possession_data[['playerName', 'team', 'eventName', 'subEventName', 'positions', 'xG', 'xT', 'possession_chain', 'has_shot', 'has_goal', 'shot_assist', 
+                                   'xT_pre_assist', 'xT_shot_assist', 'xT_shot_assist_diff', 'xT_post_assist', 'xG_pre_shot', 'xG_diff', 'xCarry_pre_shot', 'possession_chain_label',
+                                   'xG_pred', 'shot_prob' ]]
+        
+        typesOfPassesLst = df[df['eventName'] == 'Pass']['subEventName'].unique()
+        typesOfPasses = ", ".join(typesOfPassesLst)
+        typesOfDribblesLst = df[df['eventName'].isin(['Duel', 'Others on the ball'])]['subEventName'].unique()
+        typesOfDribbles = ", ".join(typesOfDribblesLst)
+        st.text("xT is assigned to Passes or Dribbles in a possession chain, where the probability that action leads to a shot multiplied by the xG predicted from that shot. \n"
+                "Linear regression is used to find the probability of shot and the predicted xG value. These are muliplied together to get xT.\n\n"
+                "Features affecting Passes and Dribbles include position and type.\n"
+                f"Types of Passes which include: {typesOfPasses}. And Types of Dribbles which include: {typesOfDribbles}.")
+        
+        
+        sorted_chains = df[df['eventName'] == 'Shot'].sort_values(by='xT_pre_assist', ascending=False)
+        possession_chain_options = sorted_chains['possession_chain'].unique()
+        
+        chain_xG = df[df['eventName'] == 'Shot'].groupby('possession_chain')['xG'].sum().to_dict()
+        chain_xT = df.groupby('possession_chain')['xT'].sum().to_dict()
+        chain_team = df[df['eventName'] == 'Shot'].groupby('possession_chain')['team'].first().to_dict()
+        chain_label = df[df['eventName'] == 'Shot'].groupby('possession_chain')['possession_chain_label'].first().to_dict()
+        
+        
+        possession_chain = st.selectbox(
+            "Select possession chain",
+            possession_chain_options,
+            format_func=lambda x: f"Chain {x}, xG: {chain_xG.get(x, 0):.3f}, xT: {chain_xT.get(x, 0):.2f}, {chain_team.get(x, '')} {chain_label.get(x, '')}",
+        )
+
+        selected_pc_df = df[df['possession_chain'] == possession_chain]
+
+        unique_players = selected_pc_df['playerName'].dropna().unique()
+        total_xG = selected_pc_df[selected_pc_df['eventName'] == 'Shot']['xG'].sum()
+        total_xT_passes = selected_pc_df[selected_pc_df['eventName'] == 'Pass']['xT'].sum()
+        total_xT_dribbles = selected_pc_df[selected_pc_df['eventName'].isin(['Duel', 'Others on the ball'])]['xT'].sum()
+        
+        st.subheader("Possession Chain Pitch Visualisation")
+        self.plot_possession_chain(selected_pc_df)
+    
+        self.display_player_data(selected_pc_df, unique_players)        
+        st.write(f"**xG from Shot**: {total_xG:.2f}, **Total xT from Passes**: {total_xT_passes:.2f}, **Total xT from Dribbles**: {total_xT_dribbles:.2f}")
+       
+    def display_player_data(self, chain_df, unique_players_list):
+        """
+        Displays player involvement in the possession chain.
+        """
+        # chain_df = chain_df[chain_df['eventName'] != 'Shot']
+        player_count = chain_df['playerName'].nunique()
+        title = "Player Involvement" if player_count == 1 else "Players Involvement"
+        st.subheader(title)
+        st.write(f"**Players Involved**: {', '.join(unique_players_list)}")
+        
+        display_df = chain_df[['playerName', 'eventName', 'subEventName', 'xG_pred', 'shot_prob', 'xT', 'xG']].reset_index(drop=True)
+        display_df.columns = ['Player Name', 'Event', 'Sub Event Name','xG Prediction', 'Shot Probability', 'xT', 'xG']
+        display_df.index = display_df.index + 1
+        
+        st.dataframe(display_df)
+    
+    def plot_possession_chain(self, chain_df):
+        """
+        Plots the possession chain that leads to a shot.
+        """
+        pitch = Pitch(pitch_type='custom', pitch_length=105, pitch_width=68, line_zorder=1, pitch_color='#aabb97',
+                      stripe_color='#c2d59d', stripe=True, line_color='white', half=False, axis=True, label=True)
+        fig, ax = pitch.draw(figsize=(10, 10))
+        
+        for _, row in chain_df.iterrows():
+            
+            if _ == 0:
+                pitch.scatter(
+                    row.positions[0]['x'] * 105 / 100, 
+                    row.positions[0]['y'] * 68 / 100, 
+                    ax=ax, 
+                    s=500,
+                    c='yellow',
+                    edgecolors='black'
+                )
+        
+            
+            
+            start_x = row.positions[0]['x'] * 105 / 100
+            start_y = row.positions[0]['y'] * 68 / 100
+            end_x = row.positions[1]['x'] * 105 / 100 if len(row.positions) > 1 else start_x
+            end_y = row.positions[1]['y'] * 68 / 100 if len(row.positions) > 1 else start_y
+
+            if row.eventName == 'Pass':
+                color = 'blue'
+                label = f"{row.playerName}\n{row.eventName} - {row.subEventName} ({row.xT:.3f})"
+            elif row.eventName in ['Duel', 'Others on the ball']:
+                color = 'red'
+                label = f"{row.playerName}\n{row.subEventName} ({row.xT:.2f})"
+            elif row.eventName == 'Shot':
+                color = 'green' if row.has_goal == 1 else 'black'
+                end_x = 105
+                end_y = 34
+                label = f"{row.playerName} ({row.xG:.2f})"
+            
+            pitch.arrows(start_x, start_y, end_x, end_y, color=color, ax=ax, width=2, headlength=5, headwidth=5)
+            ax.text((start_x + end_x) / 2, (start_y + end_y) / 2, label, fontsize=8, color='white', ha='center', va='center',
+                    bbox=dict(facecolor=color, edgecolor='none', alpha=0.6, boxstyle='round,pad=0.2'))
+
+        legend_elements = [
+            Line2D([0], [0], color='blue', lw=2, label='Pass'),
+            Line2D([0], [0], color='red', lw=2, label='Duel/Touch'),
+            Line2D([0], [0], color='green', lw=2, label='Goal'),
+            Line2D([0], [0], color='black', lw=2, label='Shot')
+        ]
+        ax.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, -0.125), ncol=4, fontsize=12)
+
+        st.pyplot(fig)

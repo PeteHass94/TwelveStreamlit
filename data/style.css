@@ -255,3 +255,11 @@ button[data-testid="baseButton-primary"] {
     border-color: darkgrey;
     left: 3.2rem;
 }
+
+.boe-bubble {
+    background-color: white !important;
+}
+
+.st-b6 {
+    color: rgb(255, 0, 0);
+}

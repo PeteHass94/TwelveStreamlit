@@ -637,8 +637,65 @@ class EuroPasses(Data):
         return self.df[(self.df["player"] == player_name) & 
                        ((self.df["pass_shot_assist"] == True) | (self.df["pass_goal_assist"] == True))]
 
+
+class Season2018(Data):
+    """
+    Class to handle and process data from the 2018 season.
+    """
+
+    def __init__(self, data_dir="./data/2018_season/"):
+        """
+        Initialize Season2018 by setting up the data directory.
+        Loads only essential metadata; individual data files load on demand.
+        """
+        self.data_dir = data_dir
+
+    def load_pickle_file(self, filename):
+        """
+        Loads a DataFrame from a pickle file if it exists.
+
+        Parameters:
+            filename (str): Name of the pickle file.
+
+        Returns:
+            DataFrame: Loaded DataFrame or an empty one if the file is missing.
+        """
+        file_path = os.path.join(self.data_dir, filename)
+
+        if os.path.exists(file_path):
+            return pd.read_pickle(file_path)
+        else:
+            print(f"Warning: {filename} not found in {self.data_dir}")
+            return pd.DataFrame()
+
+    # 🏹 Load Shot Data for England
+    def getEnglandShotData(self):
+        """Loads shot data for England."""
+        return self.load_pickle_file("shots_England.pkl")
+
+    # 🔗 Load Possession Chains for England
+    def getEnglandPossessionChains(self):
+        """Loads possession chain data for England."""
+        return self.load_pickle_file("events_England_ShotsAssists.pkl")
     
-    
+    # 🔗 Load Possession Chains for England
+    def getEuropePossessionChains(self):
+        """Loads possession chain data for England."""
+        return self.load_pickle_file("events_Europe_ShotsAssists.pkl")
+
+    # 📊 Load Player Stats for England
+    def getEnglandPlayerStats(self):
+        """Loads player statistics for England."""
+        return self.load_pickle_file("England_PlayerStats.pkl")
+
+    # 🌍 Load Player Stats for Europe
+    def getEuropePlayerStats(self):
+        """Loads player statistics for Europe."""
+        return self.load_pickle_file("Europe_PlayerStats.pkl")
+        
+
+
+
     
 class RunStats(Stats):
     """

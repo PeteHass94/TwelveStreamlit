@@ -68,6 +68,7 @@ def add_page_selector():
     st.image("data/ressources/img/TwelveEdu.png")
     st.page_link("pages/about.py", label="About")
     st.page_link("pages/euro_pass_analysis.py", label="Euro 24 pass analysis")
+    st.page_link("pages/attacker_analysis.py", label="2018 Season att. analysis")
     st.page_link("pages/run_analysis.py", label="CL 2023 run analysis")
     
     # st.page_link("pages/football_scout.py", label="Football Scout")
