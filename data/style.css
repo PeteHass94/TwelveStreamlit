@@ -263,3 +263,7 @@ button[data-testid="baseButton-primary"] {
 .st-b6 {
     color: rgb(255, 0, 0);
 }
+
+.stChatInput textarea{
+    background-color: white !important;
+}
