@@ -1518,3 +1518,214 @@ class ThreatMap(Visual):
         ax.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, -0.125), ncol=4, fontsize=12)
 
         st.pyplot(fig)
+
+from sklearn.preprocessing import MinMaxScaler
+
+
+class AttackerRadarAndDistPlot(Visual): 
+    
+    def __init__(self, player_data):
+        self.player_data = player_data[player_data['total_goals'] > 0]
+        self.categories = ['total_goals', 'total_xG', 'total_xT_received', 'total_xT_passes', 'total_xT_dribbles']
+        self.category_labels = {
+            'total_goals': 'Goals',
+            'total_xG': 'xG',
+            'total_xT_received': 'xT received',
+            'total_xT_passes': 'xT passes',
+            'total_xT_dribbles': 'xT dribbles'
+        }
+
+        self.metrics = list(reversed(self.categories))
+        self.display_names = self.category_labels
+
+        # Normalize for radar
+        self.normalised_data = player_data.copy()
+        scaler = MinMaxScaler()
+        self.normalised_data[self.categories] = scaler.fit_transform(self.normalised_data[self.categories])
+        self.normalised_data['average_rank'] = self.normalised_data[self.categories].rank(ascending=False).mean(axis=1)
+
+        # Z-score for distribution
+        self.zscore_data = player_data.copy()
+        for m in self.metrics:
+            self.zscore_data[f"{m}_norm"] = (self.zscore_data[m] - self.zscore_data[m].mean()) / self.zscore_data[m].std()
+
+        # Setup polar subplot for distribution
+        self.marker_color = (c for c in [Visual.white, Visual.bright_yellow, Visual.bright_blue])
+        self.marker_shape = (s for s in ["square", "hexagon", "diamond"])
+
+    def _setup_axes(self):
+        self.fig.update_xaxes(
+            #title_text="Z-Score",
+            range=[-1.5, 11.5],
+            fixedrange=True,
+            tickmode="array",
+            tickvals=[-1, 5, 11],
+            ticktext=["Worse", "Average", "Better"],
+            tickfont=dict(color=rgb_to_color(self.black)),
+            # showline=False, 
+            row=1, col=1)
+        
+        self.fig.update_yaxes(
+            showticklabels=False, 
+            showgrid=False, 
+            zeroline=False,
+            fixedrange=True, 
+            gridcolor=rgb_to_color(self.light_gray),
+            zerolinecolor=rgb_to_color(self.light_gray),
+            row=1, col=1)
+
+    def display_player_radar(self):
+        df = self.normalised_data
+        z_df = self.zscore_data
+
+        team = st.selectbox("Select a team:", df.sort_values(by='total_goals', ascending=False)['team'].unique(), index=5)
+        player_name = st.selectbox("Select a player:", 
+                      df[df['team'] == team].sort_values(by='total_xG', ascending=False)['playerName'].unique() 
+                      )
+
+        player_raw = self.player_data[self.player_data['playerName'] == player_name].iloc[0]
+        player_normalized = df[df['playerName'] == player_name].iloc[0]
+
+        # Radar Data
+        display_labels = [self.category_labels[cat] for cat in self.categories]
+        raw_values = [player_raw[cat] for cat in self.categories]
+        norm_values = [player_normalized[cat] for cat in self.categories]
+
+        fig = go.Figure()
+
+        fig.add_trace(go.Barpolar(
+            r=norm_values,
+            theta=display_labels,
+            text=[f"Raw: {rv:.2f}<br>Norm: {nv:.2f}" for rv, nv in zip(raw_values, norm_values)],
+            hoverinfo='text',
+            marker=dict(
+                color=norm_values,
+                colorscale='Reds',
+                cmin=0,
+                cmax=1,
+                line=dict(color='black', width=1),
+                colorbar=dict(
+                    # title="Performance",
+                    tickvals=[0.05, 0.5, 0.95],
+                    ticktext=["Worse", "Average", "Better"],
+                    len=1.1,
+                    thickness=15,
+                    x=0.8,
+                    xanchor='center',
+                    y=0.5,
+                    yanchor='middle'
+                )
+            ),
+            opacity=0.8
+            
+        ))
+
+        fig.update_layout(
+            title=f"Performance Polar Bar Chart - {player_name} (Normalised data)",
+            polar=dict(
+                radialaxis=dict(range=[0, 1], showticklabels=False, ticks='', showline=False),
+                angularaxis=dict(direction="clockwise")
+            ),
+            showlegend=False
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Show stats table
+        st.markdown(f"###### Stats Table - {player_name}")
+        stats_df = pd.DataFrame({
+            'Metric': display_labels,
+            'Raw Value': raw_values,
+            'Normalized Value': [round(val, 3) for val in norm_values]
+        })
+
+        st.dataframe(stats_df, hide_index=True)
+
+        # Distribution Plot
+        st.subheader("Comparative Player Distribution Plot")
+
+        self.fig = make_subplots(
+            rows=1, cols=1,
+            subplot_titles=["Attacker Metric Distribution"],
+            shared_xaxes=False
+        )
+        self._setup_axes()
+
+        # Add group points
+        for i, metric in enumerate(self.metrics):
+            display_label = self.display_names[metric]
+            hover_text = z_df.apply(
+                lambda row: (
+                    f"Player: {row['playerName']}<br>"
+                    f"{display_label}<br>Raw: {row[metric]:.2f}<br>Norm: {row[f'{metric}_norm']:.2f}"
+                ),
+                axis=1
+            )
+
+            self.fig.add_trace(
+                go.Scatter(
+                    x=z_df[f"{metric}_norm"],
+                    y=[i] * len(z_df),
+                    mode="markers",
+                    marker=dict(color="rgba(200, 30, 30, 0.4)", size=10),
+                    hovertext=hover_text,
+                    name="Other players",
+                    showlegend=(i == 0)
+                ),
+                row=1, col=1
+            )
+
+            self.fig.add_annotation(
+                x=5,
+                y=i+0.5,
+                text=f"<b>{display_label}</b>",
+                showarrow=False,
+                font=dict(color=rgb_to_color(self.black, 0.8), size=12, family="Arial"),
+                xref="x",
+                yref="y",
+                align="center",
+                xanchor="center",
+            )
+
+        # Add selected player
+        color = next(self.marker_color)
+        shape = next(self.marker_shape)
+        selected_row = z_df[z_df['playerName'] == player_name].iloc[0]
+
+        for i, metric in enumerate(self.metrics):
+            self.fig.add_trace(
+                go.Scatter(
+                    x=[selected_row[f"{metric}_norm"]],
+                    y=[i],
+                    mode="markers",
+                    marker=dict(
+                        color=color,
+                        size=14,
+                        symbol=shape,
+                        line=dict(width=2, color="black")
+                    ),
+                    hovertemplate=f"{self.display_names[metric]}<br>Raw: {selected_row[metric]:.2f}<br>Norm: {selected_row[f'{metric}_norm']:.2f}",
+                    name=player_name,
+                    showlegend=(i == 0)
+                ),
+                row=1, col=1
+            )
+
+        self.fig.update_layout(
+            title=f"{player_name} vs Others (Z-Score)",
+            # height=450,
+            # margin=dict(t=60, b=40, l=80, r=30),
+            paper_bgcolor=rgb_to_color(self.bg_gray),
+            plot_bgcolor=rgb_to_color(self.bg_gray),
+            legend=dict(
+                orientation="h",
+                font={"color": rgb_to_color(self.black)},
+                x=0.5,
+                xanchor="center"                
+            ),
+            xaxis=dict(
+                tickfont={"color": rgb_to_color(self.black, 0.5)}
+            )
+        )
+
+        st.plotly_chart(self.fig, use_container_width=True)

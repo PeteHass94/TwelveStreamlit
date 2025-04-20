@@ -6,7 +6,7 @@ import tiktoken
 import os
 
 from classes.data_source import Season2018 
-from classes.visual import ShotMap, ThreatMap
+from classes.visual import ShotMap, ThreatMap, AttackerRadarAndDistPlot
 from classes.chat import PassChat
 from classes.description import PassDescription
 
@@ -23,7 +23,7 @@ sidebar_container = add_common_page_elements()
 page_container = st.sidebar.container()
 sidebar_container = st.sidebar.container()
 
-st.title("Attacker Analysis: xG, xT & xCarry")
+st.title("Attacker Analysis: xG and xT")
 st.subheader(f"Attacker analysis during the season 2018/19")
 
 url = "https://figshare.com/collections/Soccer_match_event_dataset/4415000/2"
@@ -58,22 +58,7 @@ with st.expander("2018 Season Europe Player Stats Dataframe"):
     st.write(playerStats_Europe)
     
 st.divider()
-st.title("Expected Goals Calculation xG")
-
-# # Streamlit Title & Subtitle
-# st.subheader("Wyscout 2017/18 England Shot Map")
-# st.subheader("Filter to any team/player to see all their shots taken!")
-
-# # Extract unique team names from shot data
-# team_options = shotData_England['teamName'].sort_values().unique()
-# team = st.selectbox("Select a team", options=team_options, index=None, placeholder="Choose a team")
-
-# # Filter player options based on selected team
-# if team:
-#     player_options = shotData_England[shotData_England['teamName'] == team]['playerName'].sort_values().unique()
-#     player = st.selectbox("Select a player", options=player_options, index=None, placeholder="Choose a player")
-# else:
-#     player = None
+st.title("Expected Goals (xG) Visualisation")
 
 
 # Create shot map instance
@@ -84,13 +69,21 @@ shot_map.display_shot_map()
 
 
 st.divider()
-st.title("Expected Threat Calculation xT")
+st.title("Expected Threat (xT) Visualisation")
 
 # Create shot map instance
 threat_map = ThreatMap(possessionChain_England)
 
 # Display the filtered shot map
 threat_map.display_threat_map()
+
+st.divider()
+st.title("Display Player Stats - England")
+
+player_radar = AttackerRadarAndDistPlot(playerStats_England)
+player_radar.display_player_radar()
+
+
 
 
 # # Load Data
