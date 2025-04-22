@@ -1520,12 +1520,12 @@ class ThreatMap(Visual):
         st.pyplot(fig)
 
 from sklearn.preprocessing import MinMaxScaler
-
+from sklearn.metrics.pairwise import euclidean_distances
 
 class AttackerRadarAndDistPlot(Visual): 
     
-    def __init__(self, player_data):
-        self.player_data = player_data[player_data['total_goals'] > 0]
+    def __init__(self, player_stats):
+        self.player_data = player_stats[player_stats['total_goals'] > 0]
         self.categories = ['total_goals', 'total_xG', 'total_xT_received', 'total_xT_passes', 'total_xT_dribbles']
         self.category_labels = {
             'total_goals': 'Goals',
@@ -1539,13 +1539,13 @@ class AttackerRadarAndDistPlot(Visual):
         self.display_names = self.category_labels
 
         # Normalize for radar
-        self.normalised_data = player_data.copy()
+        self.normalised_data = self.player_data.copy()
         scaler = MinMaxScaler()
         self.normalised_data[self.categories] = scaler.fit_transform(self.normalised_data[self.categories])
         self.normalised_data['average_rank'] = self.normalised_data[self.categories].rank(ascending=False).mean(axis=1)
 
         # Z-score for distribution
-        self.zscore_data = player_data.copy()
+        self.zscore_data = self.player_data.copy()
         for m in self.metrics:
             self.zscore_data[f"{m}_norm"] = (self.zscore_data[m] - self.zscore_data[m].mean()) / self.zscore_data[m].std()
 
@@ -1556,10 +1556,10 @@ class AttackerRadarAndDistPlot(Visual):
     def _setup_axes(self):
         self.fig.update_xaxes(
             #title_text="Z-Score",
-            range=[-1.5, 11.5],
+            range=[-2, 8],
             fixedrange=True,
             tickmode="array",
-            tickvals=[-1, 5, 11],
+            tickvals=[0, 3, 6],
             ticktext=["Worse", "Average", "Better"],
             tickfont=dict(color=rgb_to_color(self.black)),
             # showline=False, 
@@ -1578,7 +1578,7 @@ class AttackerRadarAndDistPlot(Visual):
         df = self.normalised_data
         z_df = self.zscore_data
 
-        team = st.selectbox("Select a team:", df.sort_values(by='total_goals', ascending=False)['team'].unique(), index=5)
+        team = st.selectbox("Select a team:", df.sort_values(by='total_goals', ascending=False)['team'].unique(), index=3)
         player_name = st.selectbox("Select a player:", 
                       df[df['team'] == team].sort_values(by='total_xG', ascending=False)['playerName'].unique() 
                       )
@@ -1586,6 +1586,8 @@ class AttackerRadarAndDistPlot(Visual):
         player_raw = self.player_data[self.player_data['playerName'] == player_name].iloc[0]
         player_normalized = df[df['playerName'] == player_name].iloc[0]
 
+        self.playerName = player_name
+        
         # Radar Data
         display_labels = [self.category_labels[cat] for cat in self.categories]
         raw_values = [player_raw[cat] for cat in self.categories]
@@ -1643,7 +1645,6 @@ class AttackerRadarAndDistPlot(Visual):
 
         # Distribution Plot
         st.subheader("Comparative Player Distribution Plot")
-
         self.fig = make_subplots(
             rows=1, cols=1,
             subplot_titles=["Attacker Metric Distribution"],
@@ -1729,3 +1730,33 @@ class AttackerRadarAndDistPlot(Visual):
         )
 
         st.plotly_chart(self.fig, use_container_width=True)
+        
+    def get_similar_players(self):
+        if not hasattr(self, 'playerName'):
+            st.warning("No player selected.")
+            return
+
+        selected_player_raw = self.player_data[self.player_data['playerName'] == self.playerName].iloc[0]
+        selected_player_vector = selected_player_raw[self.categories].values.reshape(1, -1)
+
+        other_players = self.player_data[self.player_data['playerName'] != self.playerName].copy()
+        other_vectors = other_players[self.categories].values
+
+        distances = euclidean_distances(selected_player_vector, other_vectors)[0]
+        other_players['distance'] = distances
+
+        similar_players = other_players.sort_values(by='distance').head(5)
+        similar_players['distance'] = similar_players['distance'].round(3)
+
+        similar_players.rename(columns={
+            "playerName": "Player Name",
+            "team": "Team",
+            "distance": "Euclidean Distance"
+        }, inplace=True)
+        
+        similar_players.reset_index(drop=True, inplace=True)
+        similar_players.index = similar_players.index + 1
+        
+        st.markdown("#### Similar Players")
+        st.text("Euclidean distance measures how close players are across multiple stats to suggest similar profiles.")
+        st.dataframe(similar_players[['Player Name', 'Team', 'Euclidean Distance']])
